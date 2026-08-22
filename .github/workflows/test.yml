@@ -71,9 +71,9 @@ jobs:
           EOF
           echo "Configured ANTIGRAVITY_REFRESH_TOKEN credential."
 
-          # 启动 DSH Web 服务
+          # 启动 DSH Web 服务 (禁用默认外部浏览器启动以避免冲突)
           echo "2. Starting DeepSeek Harness Web Server..."
-          dsh web --port 3080 > /tmp/dsh-antigravity.log 2>&1 &
+          dsh web --port 3080 --no-open > /tmp/dsh-antigravity.log 2>&1 &
           DSH_PID=$!
 
           for i in $(seq 1 40); do
@@ -159,7 +159,7 @@ jobs:
 
           # 启动 DSH Web 服务
           echo "2. Starting DeepSeek Harness Web Server..."
-          dsh web --port 3080 > /tmp/dsh-tunnel.log 2>&1 &
+          dsh web --port 3080 --no-open > /tmp/dsh-tunnel.log 2>&1 &
           DSH_PID=$!
 
           for i in $(seq 1 40); do
@@ -285,7 +285,7 @@ jobs:
       - name: Launch DSH Server & Run Combined Chrome CDP Test
         run: |
           echo "1. Starting combined DeepSeek Harness on native port 3080..."
-          dsh web --port 3080 > /tmp/dsh-combined.log 2>&1 &
+          dsh web --port 3080 --no-open > /tmp/dsh-combined.log 2>&1 &
           DSH_PID=$!
 
           for i in $(seq 1 40); do
