@@ -53,6 +53,7 @@ async function run() {
 
   console.log('\n[1/5] Launching Chrome browser with target URL...');
   const chromeProc = spawn(chromePath, chromeArgs, { detached: true, stdio: 'ignore' });
+  chromeProc.unref();
 
   // Connect to Chrome CDP endpoint
   console.log(`[2/5] Connecting to Chrome CDP on port ${debugPort}...`);
@@ -74,6 +75,7 @@ async function run() {
   }
 
   if (!targetWs) {
+    try { chromeProc.kill('SIGKILL'); } catch {}
     throw new Error(`Failed to connect to Chrome DevTools Protocol on port ${debugPort}`);
   }
 
@@ -407,7 +409,8 @@ async function run() {
     console.log('  -> Saved: 07_live_conversation.png');
   }
 
-  ws.close();
+  try { ws.close(); } catch {}
+  try { chromeProc.kill('SIGKILL'); } catch {}
 
   if (errors.length > 0) {
     console.warn(`\n[!] Notice: ${errors.length} browser errors recorded during test:`);
@@ -417,10 +420,13 @@ async function run() {
   console.log('\n===============================================================');
   if (verificationSuccess) {
     console.log(`🎉 TEST MODE [${testMode.toUpperCase()}] VERIFICATION PASSED SUCCESSFULLY! 🎉`);
+    console.log('===============================================================\n');
+    process.exit(0);
   } else {
-    throw new Error(`Test Mode [${testMode.toUpperCase()}] verification failed.`);
+    console.error(`❌ Test Mode [${testMode.toUpperCase()}] verification failed.`);
+    console.log('===============================================================\n');
+    process.exit(1);
   }
-  console.log('===============================================================\n');
 }
 
 run().catch((err) => {
