@@ -1,0 +1,325 @@
+name: DeepSeek Harness Plugins Automated Matrix Test (Standalone & Combined)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      refresh_token:
+        description: 'Antigravity OAuth Refresh Token'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: write
+  checks: write
+
+jobs:
+  # ============================================================================
+  # 1. 单独测试：Antigravity Provider 插件套件 (LLM / 搜索 / 选择器 / 生图)
+  # ============================================================================
+  test-antigravity-standalone:
+    name: "1. Standalone: Antigravity Suite"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout DSH-Plugs-Test
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install System Dependencies & DSH
+        run: |
+          sudo apt-get update && sudo apt-get install -y curl wget
+          sudo npm install -g @deepseek-ai/dsh
+          sudo chown -R $(whoami) /usr/local/lib/node_modules
+
+      - name: Clone & Assemble Antigravity Provider Repo
+        run: |
+          echo "Cloning sprains-totem/dsh-Antigravity-Provider..."
+          git clone https://github.com/sprains-totem/dsh-Antigravity-Provider.git repo-antigravity
+
+          mkdir -p ~/.dsh/profiles/web/plugins ~/.dsh/profiles/web/node_modules
+
+          # 部署 Antigravity 4 个独立插件
+          cp -r repo-antigravity/dsh-llm-antigravity ~/.dsh/profiles/web/plugins/
+          cp -r repo-antigravity/dsh-web-search-antigravity ~/.dsh/profiles/web/plugins/
+          cp -r repo-antigravity/dsh-web-search-selector ~/.dsh/profiles/web/plugins/
+          cp -r repo-antigravity/dsh-image-gen-antigravity ~/.dsh/profiles/web/plugins/
+          cp -r ~/.dsh/profiles/web/plugins/* ~/.dsh/profiles/web/node_modules/
+
+          # 写入 cordis.patch.yml
+          cp repo-antigravity/cordis.patch.yml.example ~/.dsh/profiles/web/cordis.patch.yml
+          rm -f ~/.dsh/cordis.patch.yml
+
+          # 执行深度解禁
+          node repo-antigravity/unlock-dsh.mjs
+
+          # 写入凭据测试配置
+          REFRESH_TOKEN="${{ inputs.refresh_token || secrets.ANTIGRAVITY_REFRESH_TOKEN || 'test_mock_refresh_token_12345' }}"
+          mkdir -p ~/.dsh
+          cat <<EOF > ~/.dsh/.credentials.yaml
+          ANTIGRAVITY_REFRESH_TOKEN: "$REFRESH_TOKEN"
+          EOF
+
+      - name: Launch DSH Web Server
+        run: |
+          dsh web --port 3080 > /tmp/dsh-antigravity.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -s http://127.0.0.1:3080/ > /dev/null; then
+              echo "✅ DSH Server started on port 3080"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Chrome CDP Automated Verification (Antigravity Standalone)
+        run: |
+          export TEST_MODE="antigravity"
+          export TARGET_URL="http://127.0.0.1:3080/"
+          export HEADLESS="true"
+          export OUTPUT_DIR="./screenshots/antigravity"
+          node test/chrome-cdp-test.mjs
+
+      - name: Upload Standalone Antigravity Screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-antigravity-standalone
+          path: ./screenshots/antigravity/
+          if-no-files-found: warn
+
+  # ============================================================================
+  # 2. 单独测试：Cloudflare Tunnel 插件 (隧道穿透 / 受信任域名 / 状态管理)
+  # ============================================================================
+  test-cloudflare-tunnel-standalone:
+    name: "2. Standalone: Cloudflare Tunnel"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout DSH-Plugs-Test
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install System Dependencies & Cloudflared
+        run: |
+          sudo apt-get update && sudo apt-get install -y curl wget
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+          rm cloudflared.deb
+          sudo npm install -g @deepseek-ai/dsh
+          sudo chown -R $(whoami) /usr/local/lib/node_modules
+
+      - name: Clone & Assemble Cloudflare Tunnel Repo
+        run: |
+          echo "Cloning sprains-totem/dsh-CloudFlare-Tunnel..."
+          git clone https://github.com/sprains-totem/dsh-CloudFlare-Tunnel.git repo-cloudflare-tunnel
+
+          mkdir -p ~/.dsh/profiles/web/plugins ~/.dsh/profiles/web/node_modules
+
+          # 部署 Cloudflare Tunnel 插件
+          cp -r repo-cloudflare-tunnel ~/.dsh/profiles/web/plugins/dsh-cloudflare-tunnel
+          cp -r repo-cloudflare-tunnel ~/.dsh/profiles/web/node_modules/dsh-cloudflare-tunnel
+
+          # 写入仅包含 tunnel 的 cordis.patch.yml
+          cat <<'EOF' > ~/.dsh/profiles/web/cordis.patch.yml
+          - insert:
+              - id: cloudflare-tunnel
+                name: dsh-cloudflare-tunnel
+                config:
+                  enabled: true
+                  port: 3080
+          EOF
+          rm -f ~/.dsh/cordis.patch.yml
+
+      - name: Launch DSH Web Server
+        run: |
+          dsh web --port 3080 > /tmp/dsh-tunnel.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -s http://127.0.0.1:3080/ > /dev/null; then
+              echo "✅ DSH Server started on port 3080"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Chrome CDP Automated Verification (Tunnel Standalone)
+        run: |
+          export TEST_MODE="tunnel"
+          export TARGET_URL="http://127.0.0.1:3080/"
+          export HEADLESS="true"
+          export OUTPUT_DIR="./screenshots/tunnel"
+          node test/chrome-cdp-test.mjs
+
+      - name: Upload Standalone Tunnel Screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-tunnel-standalone
+          path: ./screenshots/tunnel/
+          if-no-files-found: warn
+
+  # ============================================================================
+  # 3. 组合全量测试：两套独立插件协同集成测试 & 公网在线服务保持
+  # ============================================================================
+  test-combined-suite:
+    name: "3. Combined: Antigravity + Tunnel Suite"
+    needs: [test-antigravity-standalone, test-cloudflare-tunnel-standalone]
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout DSH-Plugs-Test
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install System Dependencies & Cloudflared
+        run: |
+          sudo apt-get update && sudo apt-get install -y curl wget
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+          rm cloudflared.deb
+          sudo npm install -g @deepseek-ai/dsh
+          sudo chown -R $(whoami) /usr/local/lib/node_modules
+
+      - name: Clone Both Independent Plugin Repositories
+        run: |
+          echo "Cloning both repositories..."
+          git clone https://github.com/sprains-totem/dsh-Antigravity-Provider.git repo-antigravity
+          git clone https://github.com/sprains-totem/dsh-CloudFlare-Tunnel.git repo-cloudflare-tunnel
+
+          mkdir -p ~/.dsh/profiles/web/plugins ~/.dsh/profiles/web/node_modules
+
+          # 1. 部署 Antigravity 插件
+          cp -r repo-antigravity/dsh-llm-antigravity ~/.dsh/profiles/web/plugins/
+          cp -r repo-antigravity/dsh-web-search-antigravity ~/.dsh/profiles/web/plugins/
+          cp -r repo-antigravity/dsh-web-search-selector ~/.dsh/profiles/web/plugins/
+          cp -r repo-antigravity/dsh-image-gen-antigravity ~/.dsh/profiles/web/plugins/
+
+          # 2. 部署 Cloudflare Tunnel 插件
+          cp -r repo-cloudflare-tunnel ~/.dsh/profiles/web/plugins/dsh-cloudflare-tunnel
+
+          # 3. 部署到 node_modules
+          cp -r ~/.dsh/profiles/web/plugins/* ~/.dsh/profiles/web/node_modules/
+
+          # 4. 配置 cordis.patch.yml (包含全部插件)
+          cat <<'EOF' > ~/.dsh/profiles/web/cordis.patch.yml
+          - insert:
+              - id: llm-antigravity
+                name: dsh-llm-antigravity
+                config:
+                  refreshTokenEnv: ANTIGRAVITY_REFRESH_TOKEN
+              - id: web-search-antigravity
+                name: dsh-web-search-antigravity
+                config:
+                  refreshTokenEnv: ANTIGRAVITY_REFRESH_TOKEN
+              - id: web-search-selector
+                name: dsh-web-search-selector
+              - id: image-gen-antigravity
+                name: dsh-image-gen-antigravity
+                config:
+                  refreshTokenEnv: ANTIGRAVITY_REFRESH_TOKEN
+              - id: cloudflare-tunnel
+                name: dsh-cloudflare-tunnel
+                config:
+                  enabled: true
+                  port: 3080
+
+          - id: web
+            config:
+              searchProvider: antigravity
+          EOF
+          rm -f ~/.dsh/cordis.patch.yml
+
+          # 5. 执行深度解禁
+          node repo-antigravity/unlock-dsh.mjs
+
+          # 6. 配置凭据
+          REFRESH_TOKEN="${{ inputs.refresh_token || secrets.ANTIGRAVITY_REFRESH_TOKEN || 'test_mock_refresh_token_12345' }}"
+          mkdir -p ~/.dsh
+          cat <<EOF > ~/.dsh/.credentials.yaml
+          ANTIGRAVITY_REFRESH_TOKEN: "$REFRESH_TOKEN"
+          EOF
+
+      - name: Launch DSH Server
+        run: |
+          echo "Starting combined DeepSeek Harness on native port 3080..."
+          dsh web --port 3080 > /tmp/dsh-combined.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -s http://127.0.0.1:3080/ > /dev/null; then
+              echo "✅ Combined DSH Server online (HTTP 200)!"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Chrome CDP Automated Verification (Combined Mode)
+        run: |
+          export TEST_MODE="combined"
+          export TARGET_URL="http://127.0.0.1:3080/"
+          export HEADLESS="true"
+          export OUTPUT_DIR="./screenshots/combined"
+          node test/chrome-cdp-test.mjs
+
+      - name: Upload Combined Test Screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-combined-suite
+          path: ./screenshots/combined/
+          if-no-files-found: warn
+
+      - name: Start Cloudflare Tunnel & Keep Server Alive
+        env:
+          CF_WORKER_URL: ${{ secrets.CF_WORKER_URL }}
+          CF_WORKER_TOKEN: ${{ secrets.CF_WORKER_TOKEN || secrets.CLOUDFLARE_WORKER_API }}
+        run: |
+          echo "Starting Cloudflare Tunnel on port 3080..."
+          cloudflared tunnel --url http://127.0.0.1:3080 --no-autoupdate > /tmp/cloudflared.log 2>&1 &
+
+          TUNNEL_URL=""
+          for i in $(seq 1 30); do
+            TUNNEL_URL=$(grep -o 'https://[-a-zA-Z0-9]*\.trycloudflare\.com' /tmp/cloudflared.log | head -n 1 || true)
+            if [ -n "$TUNNEL_URL" ]; then
+              break
+            fi
+            sleep 1
+          done
+
+          if [ -n "$TUNNEL_URL" ]; then
+            echo "::add-mask::$TUNNEL_URL"
+            echo "✅ Cloudflare Tunnel is live & secured."
+            echo ""
+            echo "## 🌐 DeepSeek Harness Live Suite" >> $GITHUB_STEP_SUMMARY
+            echo "- **All Tests**: ✅ Standalone & Combined Automated Tests Passed" >> $GITHUB_STEP_SUMMARY
+            echo "- **Port**: 3080" >> $GITHUB_STEP_SUMMARY
+            
+            if [ -n "$CF_WORKER_URL" ] && [ -n "$CF_WORKER_TOKEN" ]; then
+              echo "Syncing tunnel to Cloudflare Worker router..."
+              curl -s -X POST "${CF_WORKER_URL%/}/update" \
+                -H "Authorization: Bearer $CF_WORKER_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{\"url\": \"$TUNNEL_URL\", \"port\": 3080}" || true
+              echo "### 🚀 **Fixed Portal URL**: [$CF_WORKER_URL]($CF_WORKER_URL)" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
+          echo "Server running. Tailing log..."
+          tail -f /tmp/dsh-combined.log

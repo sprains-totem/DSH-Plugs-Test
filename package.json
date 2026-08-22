@@ -1,0 +1,10 @@
+{
+  "name": "dsh-plugs-test",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Automated E2E testing and Chrome CDP verification harness for DeepSeek Harness plugins",
+  "scripts": {
+    "test:chrome": "node test/chrome-cdp-test.mjs"
+  }
+}
