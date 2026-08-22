@@ -48,11 +48,14 @@ async function run() {
     chromeArgs.push('--headless=new', '--no-sandbox', '--disable-setuid-sandbox');
   }
 
-  console.log('\n[1/6] Launching Chrome browser...');
+  // Pass targetUrl directly on command line so Chrome loads it from start
+  chromeArgs.push(targetUrl);
+
+  console.log('\n[1/5] Launching Chrome browser with target URL...');
   const chromeProc = spawn(chromePath, chromeArgs, { detached: true, stdio: 'ignore' });
 
   // Connect to Chrome CDP endpoint
-  console.log(`[2/6] Connecting to Chrome CDP on port ${debugPort}...`);
+  console.log(`[2/5] Connecting to Chrome CDP on port ${debugPort}...`);
   let targetWs = null;
   for (let i = 0; i < 40; i++) {
     try {
@@ -112,12 +115,33 @@ async function run() {
   await send('Page.enable');
   await send('Network.enable');
 
-  console.log(`\n[3/6] Navigating to ${targetUrl}...`);
+  console.log(`\n[3/5] Navigating and waiting for ${targetUrl} ready...`);
   await send('Page.navigate', { url: targetUrl });
 
-  // Wait for WebUI to boot and render
-  console.log('Waiting for WebUI to boot and register client modules...');
-  await sleep(7000);
+  // Wait for document ready and __DSH_BOOT__
+  for (let i = 0; i < 30; i++) {
+    try {
+      const checkState = await send('Runtime.evaluate', {
+        expression: `({
+          href: document.location.href,
+          readyState: document.readyState,
+          hasBoot: !!window.__DSH_BOOT__,
+          hasButtons: document.querySelectorAll('button').length,
+          bodyText: document.body?.innerText?.slice(0, 100) || ''
+        })`,
+        returnByValue: true
+      });
+      const st = checkState.result?.value;
+      if (st?.href !== 'about:blank' && st?.hasBoot && st?.hasButtons > 0) {
+        console.log(`  -> Page ready on check #${i}:`, st);
+        break;
+      }
+    } catch {}
+    await sleep(500);
+  }
+
+  // Extra settle time for client modules
+  await sleep(3000);
 
   // Capture Main Dashboard View
   const shot1 = await send('Page.captureScreenshot', { format: 'png' });
@@ -143,7 +167,7 @@ async function run() {
   console.log('  -> Boot Manifest Check:', bootManifest.result?.value);
 
   // Open Settings Modal
-  console.log('\n[4/6] Opening Settings modal...');
+  console.log('\n[4/5] Opening Settings modal...');
   const openSettings = await send('Runtime.evaluate', {
     expression: `(() => {
       const btns = Array.from(document.querySelectorAll('button, [role="button"], a'));
