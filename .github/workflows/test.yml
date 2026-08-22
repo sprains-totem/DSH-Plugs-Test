@@ -57,7 +57,7 @@ jobs:
           cp -r ~/.dsh/profiles/web/plugins/* ~/.dsh/profiles/web/node_modules/
 
           # 写入 cordis.patch.yml (纯 Antigravity 套件)
-          cp repo-antigravity/cordis.patch.yml.example ~/.dsh/profiles/web/cordis.patch.yml
+          cp cordis.antigravity.yml ~/.dsh/profiles/web/cordis.patch.yml
           rm -f ~/.dsh/cordis.patch.yml
 
           # 执行深度解禁
@@ -147,14 +147,7 @@ jobs:
           cp -r repo-cloudflare-tunnel ~/.dsh/profiles/web/node_modules/dsh-cloudflare-tunnel
 
           # 写入仅包含 tunnel 的 cordis.patch.yml
-          cat <<'EOF' > ~/.dsh/profiles/web/cordis.patch.yml
-          - insert:
-              - id: cloudflare-tunnel
-                name: dsh-cloudflare-tunnel
-                config:
-                  enabled: true
-                  port: 3080
-          EOF
+          cp cordis.tunnel.yml ~/.dsh/profiles/web/cordis.patch.yml
           rm -f ~/.dsh/cordis.patch.yml
 
           # 启动 DSH Web 服务
@@ -242,33 +235,8 @@ jobs:
           # 3. 部署到 node_modules
           cp -r ~/.dsh/profiles/web/plugins/* ~/.dsh/profiles/web/node_modules/
 
-          # 4. 配置 cordis.patch.yml (包含全部插件)
-          cat <<'EOF' > ~/.dsh/profiles/web/cordis.patch.yml
-          - insert:
-              - id: llm-antigravity
-                name: dsh-llm-antigravity
-                config:
-                  refreshTokenEnv: ANTIGRAVITY_REFRESH_TOKEN
-              - id: web-search-antigravity
-                name: dsh-web-search-antigravity
-                config:
-                  refreshTokenEnv: ANTIGRAVITY_REFRESH_TOKEN
-              - id: web-search-selector
-                name: dsh-web-search-selector
-              - id: image-gen-antigravity
-                name: dsh-image-gen-antigravity
-                config:
-                  refreshTokenEnv: ANTIGRAVITY_REFRESH_TOKEN
-              - id: cloudflare-tunnel
-                name: dsh-cloudflare-tunnel
-                config:
-                  enabled: true
-                  port: 3080
-
-          - id: web
-            config:
-              searchProvider: antigravity
-          EOF
+          # 4. 配置 cordis.patch.yml (包含全部插件，使用预置纯净 YAML)
+          cp cordis.combined.yml ~/.dsh/profiles/web/cordis.patch.yml
           rm -f ~/.dsh/cordis.patch.yml
 
           # 5. 执行深度解禁

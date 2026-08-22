@@ -1,0 +1,6 @@
+- insert:
+    - id: cloudflare-tunnel
+      name: dsh-cloudflare-tunnel
+      config:
+        enabled: true
+        port: 3080

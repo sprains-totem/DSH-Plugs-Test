@@ -134,6 +134,9 @@ async function run() {
         returnByValue: true
       });
       const st = checkState.result?.value;
+      if (st?.href === 'about:blank') {
+        await send('Page.navigate', { url: targetUrl });
+      }
       if (st?.href !== 'about:blank' && st?.hasBoot && st?.hasButtons > 0) {
         console.log(`  -> Page ready on check #${i}:`, st);
         break;
