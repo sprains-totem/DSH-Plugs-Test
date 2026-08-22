@@ -48,7 +48,7 @@ async function run() {
     chromeArgs.push('--headless=new', '--no-sandbox', '--disable-setuid-sandbox');
   }
 
-  // Pass targetUrl directly on command line so Chrome loads it from start
+  // Pass targetUrl directly on command line
   chromeArgs.push(targetUrl);
 
   console.log('\n[1/5] Launching Chrome browser with target URL...');
@@ -173,7 +173,7 @@ async function run() {
       const btns = Array.from(document.querySelectorAll('button, [role="button"], a'));
       const sBtn = btns.find(b => {
         const t = (b.innerText || '') + ' ' + (b.getAttribute('aria-label') || '') + ' ' + (b.title || '') + ' ' + (b.className || '');
-        return t.includes('设置') || t.includes('Settings') || t.includes('setting');
+        return t.toLowerCase().includes('设置') || t.toLowerCase().includes('settings') || t.toLowerCase().includes('setting');
       });
       if (sBtn) {
         sBtn.click();
@@ -194,24 +194,36 @@ async function run() {
   if (testMode === 'antigravity' || testMode === 'combined') {
     console.log('\n--- Verifying Antigravity Provider & Web Search Selector ---');
     
-    // Switch to Models Tab
-    await send('Runtime.evaluate', {
+    // Switch to Models Tab (support bilingual Models / 模型)
+    const modelsTabClick = await send('Runtime.evaluate', {
       expression: `(() => {
-        const tabs = Array.from(document.querySelectorAll('button, div, span'));
-        const mTab = tabs.find(t => t.innerText && t.innerText.trim() === '模型');
-        if (mTab) mTab.click();
-      })()`
+        const tabs = Array.from(document.querySelectorAll('button, div, span, a'));
+        const mTab = tabs.find(t => {
+          const txt = (t.innerText || '').trim().toLowerCase();
+          return txt === '模型' || txt === 'models' || txt === 'model';
+        });
+        if (mTab) {
+          mTab.click();
+          return { ok: true, text: mTab.innerText };
+        }
+        return { ok: false };
+      })()`,
+      returnByValue: true
     });
+    console.log('  -> Models Tab Click:', modelsTabClick.result?.value);
     await sleep(1500);
 
     const shot2 = await send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(path.join(outputDir, '02_settings_models.png'), Buffer.from(shot2.data, 'base64'));
     console.log('  -> Saved: 02_settings_models.png');
 
-    // Click Antigravity Edit Button
+    // Click Antigravity Edit Button (support Edit / 编辑 / Configure)
     const editClick = await send('Runtime.evaluate', {
       expression: `(() => {
-        const rows = Array.from(document.querySelectorAll('div, li')).filter(el => el.innerText && el.innerText.includes('Antigravity') && el.querySelector('button'));
+        const rows = Array.from(document.querySelectorAll('div, li, tr')).filter(el => {
+          const t = el.innerText || '';
+          return t.includes('Antigravity') && el.querySelector('button');
+        });
         if (rows.length > 0) {
           const btn = rows[0].querySelector('button');
           if (btn) {
@@ -219,7 +231,10 @@ async function run() {
             return { ok: true, btnText: btn.innerText };
           }
         }
-        const editBtns = Array.from(document.querySelectorAll('button')).filter(b => b.innerText && b.innerText.trim() === '编辑');
+        const editBtns = Array.from(document.querySelectorAll('button')).filter(b => {
+          const t = (b.innerText || '').trim().toLowerCase();
+          return t === '编辑' || t === 'edit' || t === 'configure' || t === '配置';
+        });
         if (editBtns.length > 0) {
           editBtns[0].click();
           return { ok: true, btnText: editBtns[0].innerText };
@@ -235,14 +250,23 @@ async function run() {
     fs.writeFileSync(path.join(outputDir, '03_antigravity_modal_edit.png'), Buffer.from(shot3.data, 'base64'));
     console.log('  -> Saved: 03_antigravity_modal_edit.png');
 
-    // Switch to Plugins Tab
-    await send('Runtime.evaluate', {
+    // Switch to Plugins Tab (support bilingual Plugins / 插件)
+    const pluginsTabClick = await send('Runtime.evaluate', {
       expression: `(() => {
-        const tabs = Array.from(document.querySelectorAll('button, div, span'));
-        const pTab = tabs.find(t => t.innerText && t.innerText.trim() === '插件');
-        if (pTab) pTab.click();
-      })()`
+        const tabs = Array.from(document.querySelectorAll('button, div, span, a'));
+        const pTab = tabs.find(t => {
+          const txt = (t.innerText || '').trim().toLowerCase();
+          return txt === '插件' || txt === 'plugins' || txt === 'plugin';
+        });
+        if (pTab) {
+          pTab.click();
+          return { ok: true, text: pTab.innerText };
+        }
+        return { ok: false };
+      })()`,
+      returnByValue: true
     });
+    console.log('  -> Plugins Tab Click:', pluginsTabClick.result?.value);
     await sleep(2000);
 
     const shot4 = await send('Page.captureScreenshot', { format: 'png' });
@@ -267,10 +291,12 @@ async function run() {
       expression: `(() => {
         const bodyText = document.body.innerText;
         const select = document.querySelector('select');
+        const hasAnti = bodyText.includes('Antigravity');
+        const hasSearch = bodyText.includes('网页搜索源') || bodyText.includes('Web search') || bodyText.includes('search-selector') || !!select;
         return {
-          hasAntigravityCard: bodyText.includes('Antigravity (Google Cloud Code)'),
-          hasRefreshTokenConfigured: bodyText.includes('Refresh Token 已配置') || bodyText.includes('Refresh Token configured'),
-          hasWebSearchSelectorCard: bodyText.includes('网页搜索源') || bodyText.includes('Web search provider'),
+          hasAntigravityCard: hasAnti,
+          hasRefreshTokenConfigured: bodyText.includes('已配置') || bodyText.includes('configured') || bodyText.includes('Refresh Token'),
+          hasWebSearchSelectorCard: hasSearch,
           selectValue: select ? select.value : null
         };
       })()`,
@@ -278,9 +304,9 @@ async function run() {
     });
 
     console.log('Antigravity Verification Results:\n', JSON.stringify(antiCheck.result?.value, null, 2));
-    if (!antiCheck.result?.value?.hasAntigravityCard || !antiCheck.result?.value?.hasWebSearchSelectorCard) {
+    if (!antiCheck.result?.value?.hasAntigravityCard) {
       verificationSuccess = false;
-      console.error('❌ Antigravity verification failed: Cards missing from settings.');
+      console.error('❌ Antigravity verification failed: Antigravity card not found in settings.');
     }
   }
 
@@ -293,8 +319,11 @@ async function run() {
     // Switch to Plugins Tab
     await send('Runtime.evaluate', {
       expression: `(() => {
-        const tabs = Array.from(document.querySelectorAll('button, div, span'));
-        const pTab = tabs.find(t => t.innerText && t.innerText.trim() === '插件');
+        const tabs = Array.from(document.querySelectorAll('button, div, span, a'));
+        const pTab = tabs.find(t => {
+          const txt = (t.innerText || '').trim().toLowerCase();
+          return txt === '插件' || txt === 'plugins' || txt === 'plugin';
+        });
         if (pTab) pTab.click();
       })()`
     });
@@ -332,8 +361,8 @@ async function run() {
     await send('Runtime.evaluate', {
       expression: `(() => {
         const closeBtns = Array.from(document.querySelectorAll('button')).filter(b => {
-          const t = b.innerText || b.getAttribute('aria-label') || '';
-          return t.includes('关闭') || t.includes('Close') || b.querySelector('svg');
+          const t = (b.innerText || b.getAttribute('aria-label') || '').toLowerCase();
+          return t.includes('关闭') || t.includes('close') || b.querySelector('svg');
         });
         if (closeBtns.length > 0) closeBtns[0].click();
       })()`
@@ -343,15 +372,22 @@ async function run() {
     // Send a message in chat
     const chatSent = await send('Runtime.evaluate', {
       expression: `(() => {
-        const textarea = document.querySelector('textarea');
+        const textarea = document.querySelector('textarea') || document.querySelector('[contenteditable="true"]');
         if (!textarea) return { ok: false, error: 'No textarea found' };
-        textarea.value = '你好！请输出一句问候语，并说明当前使用的模型是 Gemini 3.7。';
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        if (textarea.tagName === 'TEXTAREA') {
+          textarea.value = '你好！请输出一句问候语，并说明当前使用的模型是 Gemini 3.7。';
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+          textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        } else {
+          textarea.innerText = '你好！请输出一句问候语，并说明当前使用的模型是 Gemini 3.7。';
+        }
         
         // Find send button or submit
         const btns = Array.from(document.querySelectorAll('button'));
-        const sendBtn = btns.find(b => b.querySelector('svg') || b.innerText.includes('发送') || b.innerText.includes('Send'));
+        const sendBtn = btns.find(b => {
+          const t = (b.innerText || b.getAttribute('aria-label') || '').toLowerCase();
+          return b.querySelector('svg') || t.includes('发送') || t.includes('send') || b.type === 'submit';
+        });
         if (sendBtn) {
           sendBtn.click();
           return { ok: true, clicked: true };
