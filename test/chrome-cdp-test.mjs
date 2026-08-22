@@ -48,11 +48,11 @@ async function run() {
     chromeArgs.push('--headless=new', '--no-sandbox', '--disable-setuid-sandbox');
   }
 
-  console.log('\n[1/5] Launching Chrome browser...');
+  console.log('\n[1/6] Launching Chrome browser...');
   const chromeProc = spawn(chromePath, chromeArgs, { detached: true, stdio: 'ignore' });
 
   // Connect to Chrome CDP endpoint
-  console.log(`[2/5] Connecting to Chrome CDP on port ${debugPort}...`);
+  console.log(`[2/6] Connecting to Chrome CDP on port ${debugPort}...`);
   let targetWs = null;
   for (let i = 0; i < 40; i++) {
     try {
@@ -112,7 +112,7 @@ async function run() {
   await send('Page.enable');
   await send('Network.enable');
 
-  console.log(`\n[3/5] Navigating to ${targetUrl}...`);
+  console.log(`\n[3/6] Navigating to ${targetUrl}...`);
   await send('Page.navigate', { url: targetUrl });
 
   // Wait for WebUI to boot and render
@@ -143,7 +143,7 @@ async function run() {
   console.log('  -> Boot Manifest Check:', bootManifest.result?.value);
 
   // Open Settings Modal
-  console.log('\n[4/5] Opening Settings modal...');
+  console.log('\n[4/6] Opening Settings modal...');
   const openSettings = await send('Runtime.evaluate', {
     expression: `(() => {
       const btns = Array.from(document.querySelectorAll('button, [role="button"], a'));
@@ -296,6 +296,55 @@ async function run() {
       verificationSuccess = false;
       console.error('❌ Tunnel verification failed: Error banner detected.');
     }
+  }
+
+  // -------------------------------------------------------------
+  // Test Mode: Live Chat Conversation Test (Antigravity Gemini LLM)
+  // -------------------------------------------------------------
+  if (testMode === 'antigravity' || testMode === 'combined') {
+    console.log('\n[5/5] Testing Live Chat Conversation with Antigravity Gemini 3.7...');
+    
+    // Close settings modal
+    await send('Runtime.evaluate', {
+      expression: `(() => {
+        const closeBtns = Array.from(document.querySelectorAll('button')).filter(b => {
+          const t = b.innerText || b.getAttribute('aria-label') || '';
+          return t.includes('关闭') || t.includes('Close') || b.querySelector('svg');
+        });
+        if (closeBtns.length > 0) closeBtns[0].click();
+      })()`
+    });
+    await sleep(1000);
+
+    // Send a message in chat
+    const chatSent = await send('Runtime.evaluate', {
+      expression: `(() => {
+        const textarea = document.querySelector('textarea');
+        if (!textarea) return { ok: false, error: 'No textarea found' };
+        textarea.value = '你好！请输出一句问候语，并说明当前使用的模型是 Gemini 3.7。';
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        
+        // Find send button or submit
+        const btns = Array.from(document.querySelectorAll('button'));
+        const sendBtn = btns.find(b => b.querySelector('svg') || b.innerText.includes('发送') || b.innerText.includes('Send'));
+        if (sendBtn) {
+          sendBtn.click();
+          return { ok: true, clicked: true };
+        }
+        return { ok: true, clicked: false };
+      })()`,
+      returnByValue: true
+    });
+    console.log('  -> Chat message trigger:', chatSent.result?.value);
+
+    // Wait for response generation (up to 15s)
+    console.log('  -> Waiting for model streaming response...');
+    await sleep(12000);
+
+    const shotChat = await send('Page.captureScreenshot', { format: 'png' });
+    fs.writeFileSync(path.join(outputDir, '07_live_conversation.png'), Buffer.from(shotChat.data, 'base64'));
+    console.log('  -> Saved: 07_live_conversation.png');
   }
 
   ws.close();
