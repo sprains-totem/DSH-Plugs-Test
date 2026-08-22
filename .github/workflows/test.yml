@@ -56,7 +56,7 @@ jobs:
           cp -r repo-antigravity/dsh-image-gen-antigravity ~/.dsh/profiles/web/plugins/
           cp -r ~/.dsh/profiles/web/plugins/* ~/.dsh/profiles/web/node_modules/
 
-          # 写入 cordis.patch.yml
+          # 写入 cordis.patch.yml (纯 Antigravity 套件)
           cp repo-antigravity/cordis.patch.yml.example ~/.dsh/profiles/web/cordis.patch.yml
           rm -f ~/.dsh/cordis.patch.yml
 
@@ -71,14 +71,20 @@ jobs:
           EOF
           echo "Configured ANTIGRAVITY_REFRESH_TOKEN credential."
 
-          # 启动 DSH Web 服务 (在同一步骤中后台运行，确保生命周期活跃)
+          # 启动 DSH Web 服务
           echo "2. Starting DeepSeek Harness Web Server..."
           dsh web --port 3080 > /tmp/dsh-antigravity.log 2>&1 &
+          DSH_PID=$!
 
           for i in $(seq 1 40); do
-            if curl -s http://127.0.0.1:3080/ > /dev/null; then
-              echo "✅ DSH Server started on port 3080"
+            if curl -s http://127.0.0.1:3080/ | grep -q "DOCTYPE html"; then
+              echo "✅ DSH Server started on port 3080 (HTML ready)!"
               break
+            fi
+            if ! kill -0 $DSH_PID 2>/dev/null; then
+              echo "❌ DSH Server crashed on startup! Log output:"
+              cat /tmp/dsh-antigravity.log
+              exit 1
             fi
             sleep 1
           done
@@ -89,7 +95,11 @@ jobs:
           export TARGET_URL="http://127.0.0.1:3080/"
           export HEADLESS="true"
           export OUTPUT_DIR="./screenshots/antigravity"
-          node test/chrome-cdp-test.mjs
+          node test/chrome-cdp-test.mjs || {
+            echo "❌ Chrome test failed. DSH Log output:"
+            cat /tmp/dsh-antigravity.log
+            exit 1
+          }
 
       - name: Upload Standalone Antigravity Screenshots
         uses: actions/upload-artifact@v4
@@ -150,11 +160,17 @@ jobs:
           # 启动 DSH Web 服务
           echo "2. Starting DeepSeek Harness Web Server..."
           dsh web --port 3080 > /tmp/dsh-tunnel.log 2>&1 &
+          DSH_PID=$!
 
           for i in $(seq 1 40); do
-            if curl -s http://127.0.0.1:3080/ > /dev/null; then
-              echo "✅ DSH Server started on port 3080"
+            if curl -s http://127.0.0.1:3080/ | grep -q "DOCTYPE html"; then
+              echo "✅ DSH Server started on port 3080 (HTML ready)!"
               break
+            fi
+            if ! kill -0 $DSH_PID 2>/dev/null; then
+              echo "❌ DSH Server crashed on startup! Log output:"
+              cat /tmp/dsh-tunnel.log
+              exit 1
             fi
             sleep 1
           done
@@ -165,7 +181,11 @@ jobs:
           export TARGET_URL="http://127.0.0.1:3080/"
           export HEADLESS="true"
           export OUTPUT_DIR="./screenshots/tunnel"
-          node test/chrome-cdp-test.mjs
+          node test/chrome-cdp-test.mjs || {
+            echo "❌ Chrome test failed. DSH Log output:"
+            cat /tmp/dsh-tunnel.log
+            exit 1
+          }
 
       - name: Upload Standalone Tunnel Screenshots
         uses: actions/upload-artifact@v4
@@ -266,11 +286,17 @@ jobs:
         run: |
           echo "1. Starting combined DeepSeek Harness on native port 3080..."
           dsh web --port 3080 > /tmp/dsh-combined.log 2>&1 &
+          DSH_PID=$!
 
           for i in $(seq 1 40); do
-            if curl -s http://127.0.0.1:3080/ > /dev/null; then
+            if curl -s http://127.0.0.1:3080/ | grep -q "DOCTYPE html"; then
               echo "✅ Combined DSH Server online (HTTP 200)!"
               break
+            fi
+            if ! kill -0 $DSH_PID 2>/dev/null; then
+              echo "❌ DSH Server crashed on startup! Log output:"
+              cat /tmp/dsh-combined.log
+              exit 1
             fi
             sleep 1
           done
@@ -280,7 +306,11 @@ jobs:
           export TARGET_URL="http://127.0.0.1:3080/"
           export HEADLESS="true"
           export OUTPUT_DIR="./screenshots/combined"
-          node test/chrome-cdp-test.mjs
+          node test/chrome-cdp-test.mjs || {
+            echo "❌ Chrome test failed. DSH Log output:"
+            cat /tmp/dsh-combined.log
+            exit 1
+          }
 
       - name: Upload Combined Test Screenshots
         uses: actions/upload-artifact@v4
