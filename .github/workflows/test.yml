@@ -42,9 +42,9 @@ jobs:
           sudo npm install -g @deepseek-ai/dsh
           sudo chown -R $(whoami) /usr/local/lib/node_modules
 
-      - name: Clone & Assemble Antigravity Provider Repo
+      - name: Clone, Assemble & Execute Chrome CDP Test (Antigravity Standalone)
         run: |
-          echo "Cloning sprains-totem/dsh-Antigravity-Provider..."
+          echo "1. Cloning sprains-totem/dsh-Antigravity-Provider..."
           git clone https://github.com/sprains-totem/dsh-Antigravity-Provider.git repo-antigravity
 
           mkdir -p ~/.dsh/profiles/web/plugins ~/.dsh/profiles/web/node_modules
@@ -71,10 +71,11 @@ jobs:
           EOF
           echo "Configured ANTIGRAVITY_REFRESH_TOKEN credential."
 
-      - name: Launch DSH Web Server
-        run: |
+          # 启动 DSH Web 服务 (在同一步骤中后台运行，确保生命周期活跃)
+          echo "2. Starting DeepSeek Harness Web Server..."
           dsh web --port 3080 > /tmp/dsh-antigravity.log 2>&1 &
-          for i in $(seq 1 30); do
+
+          for i in $(seq 1 40); do
             if curl -s http://127.0.0.1:3080/ > /dev/null; then
               echo "✅ DSH Server started on port 3080"
               break
@@ -82,8 +83,8 @@ jobs:
             sleep 1
           done
 
-      - name: Chrome CDP Automated Verification (Antigravity Standalone)
-        run: |
+          # 执行 Chrome CDP 自动化测试
+          echo "3. Running Chrome CDP Automated Verification..."
           export TEST_MODE="antigravity"
           export TARGET_URL="http://127.0.0.1:3080/"
           export HEADLESS="true"
@@ -124,9 +125,9 @@ jobs:
           sudo npm install -g @deepseek-ai/dsh
           sudo chown -R $(whoami) /usr/local/lib/node_modules
 
-      - name: Clone & Assemble Cloudflare Tunnel Repo
+      - name: Clone, Assemble & Execute Chrome CDP Test (Tunnel Standalone)
         run: |
-          echo "Cloning sprains-totem/dsh-CloudFlare-Tunnel..."
+          echo "1. Cloning sprains-totem/dsh-CloudFlare-Tunnel..."
           git clone https://github.com/sprains-totem/dsh-CloudFlare-Tunnel.git repo-cloudflare-tunnel
 
           mkdir -p ~/.dsh/profiles/web/plugins ~/.dsh/profiles/web/node_modules
@@ -146,10 +147,11 @@ jobs:
           EOF
           rm -f ~/.dsh/cordis.patch.yml
 
-      - name: Launch DSH Web Server
-        run: |
+          # 启动 DSH Web 服务
+          echo "2. Starting DeepSeek Harness Web Server..."
           dsh web --port 3080 > /tmp/dsh-tunnel.log 2>&1 &
-          for i in $(seq 1 30); do
+
+          for i in $(seq 1 40); do
             if curl -s http://127.0.0.1:3080/ > /dev/null; then
               echo "✅ DSH Server started on port 3080"
               break
@@ -157,8 +159,8 @@ jobs:
             sleep 1
           done
 
-      - name: Chrome CDP Automated Verification (Tunnel Standalone)
-        run: |
+          # 执行 Chrome CDP 自动化测试
+          echo "3. Running Chrome CDP Automated Verification..."
           export TEST_MODE="tunnel"
           export TARGET_URL="http://127.0.0.1:3080/"
           export HEADLESS="true"
@@ -260,10 +262,11 @@ jobs:
           EOF
           echo "Configured ANTIGRAVITY_REFRESH_TOKEN credential."
 
-      - name: Launch DSH Server
+      - name: Launch DSH Server & Run Combined Chrome CDP Test
         run: |
-          echo "Starting combined DeepSeek Harness on native port 3080..."
+          echo "1. Starting combined DeepSeek Harness on native port 3080..."
           dsh web --port 3080 > /tmp/dsh-combined.log 2>&1 &
+
           for i in $(seq 1 40); do
             if curl -s http://127.0.0.1:3080/ > /dev/null; then
               echo "✅ Combined DSH Server online (HTTP 200)!"
@@ -272,8 +275,7 @@ jobs:
             sleep 1
           done
 
-      - name: Chrome CDP Automated Verification (Combined Mode)
-        run: |
+          echo "2. Running Chrome CDP Automated Verification (Combined Mode)..."
           export TEST_MODE="combined"
           export TARGET_URL="http://127.0.0.1:3080/"
           export HEADLESS="true"
