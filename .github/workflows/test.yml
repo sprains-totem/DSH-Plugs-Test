@@ -83,7 +83,7 @@ jobs:
 
           DSH_READY=false
           for i in $(seq 1 60); do
-            if curl -s http://127.0.0.1:3080/ | grep -q "DOCTYPE html"; then
+            if curl -fsS http://127.0.0.1:3080/ | grep -qi "doctype html"; then
               echo "✅ DSH Server started on port 3080 (HTML ready) on attempt $i!"
               DSH_READY=true
               break
@@ -169,7 +169,7 @@ jobs:
 
           DSH_READY=false
           for i in $(seq 1 60); do
-            if curl -s http://127.0.0.1:3080/ | grep -q "DOCTYPE html"; then
+            if curl -fsS http://127.0.0.1:3080/ | grep -qi "doctype html"; then
               echo "✅ DSH Server started on port 3080 (HTML ready) on attempt $i!"
               DSH_READY=true
               break
@@ -277,7 +277,7 @@ jobs:
 
           DSH_READY=false
           for i in $(seq 1 60); do
-            if curl -s http://127.0.0.1:3080/ | grep -q "DOCTYPE html"; then
+            if curl -fsS http://127.0.0.1:3080/ | grep -qi "doctype html"; then
               echo "✅ Combined DSH Server online (HTTP 200) on attempt $i!"
               DSH_READY=true
               break
