@@ -12,6 +12,11 @@ on:
         description: 'Antigravity OAuth Refresh Token'
         required: false
         type: string
+      keep_alive:
+        description: 'Keep server alive after tests pass'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -76,9 +81,11 @@ jobs:
           dsh web --port 3080 --no-open > /tmp/dsh-antigravity.log 2>&1 &
           DSH_PID=$!
 
-          for i in $(seq 1 40); do
+          DSH_READY=false
+          for i in $(seq 1 60); do
             if curl -s http://127.0.0.1:3080/ | grep -q "DOCTYPE html"; then
-              echo "✅ DSH Server started on port 3080 (HTML ready)!"
+              echo "✅ DSH Server started on port 3080 (HTML ready) on attempt $i!"
+              DSH_READY=true
               break
             fi
             if ! kill -0 $DSH_PID 2>/dev/null; then
@@ -88,6 +95,11 @@ jobs:
             fi
             sleep 1
           done
+          if [ "$DSH_READY" != "true" ]; then
+            echo "❌ DSH Server timed out waiting for HTTP ready state! Log output:"
+            cat /tmp/dsh-antigravity.log
+            exit 1
+          fi
 
           # 执行 Chrome CDP 自动化测试
           echo "3. Running Chrome CDP Automated Verification..."
@@ -155,9 +167,11 @@ jobs:
           dsh web --port 3080 --no-open > /tmp/dsh-tunnel.log 2>&1 &
           DSH_PID=$!
 
-          for i in $(seq 1 40); do
+          DSH_READY=false
+          for i in $(seq 1 60); do
             if curl -s http://127.0.0.1:3080/ | grep -q "DOCTYPE html"; then
-              echo "✅ DSH Server started on port 3080 (HTML ready)!"
+              echo "✅ DSH Server started on port 3080 (HTML ready) on attempt $i!"
+              DSH_READY=true
               break
             fi
             if ! kill -0 $DSH_PID 2>/dev/null; then
@@ -167,6 +181,11 @@ jobs:
             fi
             sleep 1
           done
+          if [ "$DSH_READY" != "true" ]; then
+            echo "❌ DSH Server timed out waiting for HTTP ready state! Log output:"
+            cat /tmp/dsh-tunnel.log
+            exit 1
+          fi
 
           # 执行 Chrome CDP 自动化测试
           echo "3. Running Chrome CDP Automated Verification..."
@@ -256,9 +275,11 @@ jobs:
           dsh web --port 3080 --no-open > /tmp/dsh-combined.log 2>&1 &
           DSH_PID=$!
 
-          for i in $(seq 1 40); do
+          DSH_READY=false
+          for i in $(seq 1 60); do
             if curl -s http://127.0.0.1:3080/ | grep -q "DOCTYPE html"; then
-              echo "✅ Combined DSH Server online (HTTP 200)!"
+              echo "✅ Combined DSH Server online (HTTP 200) on attempt $i!"
+              DSH_READY=true
               break
             fi
             if ! kill -0 $DSH_PID 2>/dev/null; then
@@ -268,6 +289,11 @@ jobs:
             fi
             sleep 1
           done
+          if [ "$DSH_READY" != "true" ]; then
+            echo "❌ Combined DSH Server timed out waiting for ready state! Log output:"
+            cat /tmp/dsh-combined.log
+            exit 1
+          fi
 
           echo "2. Running Chrome CDP Automated Verification (Combined Mode)..."
           export TEST_MODE="combined"
@@ -323,5 +349,9 @@ jobs:
             fi
           fi
 
-          echo "Server running. Tailing log..."
-          tail -f /tmp/dsh-combined.log
+          if [ "${{ inputs.keep_alive }}" = "true" ]; then
+            echo "Server running in keep-alive mode. Tailing log..."
+            tail -f /tmp/dsh-combined.log
+          else
+            echo "🎉 All Standalone and Combined Tests Passed! Test run completed successfully."
+          fi
