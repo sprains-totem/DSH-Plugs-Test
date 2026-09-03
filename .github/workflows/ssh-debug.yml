@@ -1,14 +1,18 @@
-name: Interactive SSH & Reliability Test
+name: "Interactive SSH and Reliability Test"
 
 on:
+  push:
+    branches:
+      - main
+      - master
   workflow_dispatch:
     inputs:
       refresh_token:
-        description: 'Antigravity OAuth Refresh Token'
+        description: "Antigravity OAuth Refresh Token"
         required: false
         type: string
       auto_start_dsh:
-        description: 'Auto-start DSH Server in background'
+        description: "Auto-start DSH Server in background"
         required: false
         type: boolean
         default: true
@@ -42,7 +46,7 @@ jobs:
           sudo npm install -g @deepseek-ai/dsh
           sudo chown -R $(whoami) /usr/local/lib/node_modules
 
-      - name: Setup Plugins & Environment (Antigravity + Cloudflare Tunnel)
+      - name: Setup Plugins & Environment
         run: |
           echo "Cloning plugin repositories..."
           git clone https://github.com/sprains-totem/dsh-Antigravity-Provider.git repo-antigravity
@@ -74,9 +78,7 @@ jobs:
           # 6. 配置凭据
           REFRESH_TOKEN="${{ inputs.refresh_token || secrets.ANTIGRAVITY_REFRESH_TOKEN || '1//mock_token_for_ui_verification' }}"
           mkdir -p ~/.dsh
-          cat <<EOF > ~/.dsh/.credentials.yaml
-ANTIGRAVITY_REFRESH_TOKEN: "$REFRESH_TOKEN"
-EOF
+          echo "ANTIGRAVITY_REFRESH_TOKEN: \"$REFRESH_TOKEN\"" > ~/.dsh/.credentials.yaml
           echo "Configured ANTIGRAVITY_REFRESH_TOKEN credential."
 
       - name: Start DSH Server in Background
@@ -124,53 +126,22 @@ EOF
           echo "=========================================================="
 
           if [ -n "$GITHUB_STEP_SUMMARY" ]; then
-            cat <<EOF >> "$GITHUB_STEP_SUMMARY"
-
-## 🔑 Tmate 交互式调试终端 (SSH & Web Shell)
-- **SSH 快速连接**: \`$TMATE_SSH\`
-- **Web 网页终端**: [$TMATE_WEB]($TMATE_WEB)
-
-### 🛠️ 常用测试命令：
-\`\`\`bash
-# 检查 DSH 服务状态
-curl -I http://127.0.0.1:3080/
-
-# 查看 DSH 运行日志
-tail -f /tmp/dsh-combined.log
-
-# 运行 Chrome CDP 自动化测试
-TEST_MODE=combined TARGET_URL=http://127.0.0.1:3080/ HEADLESS=true OUTPUT_DIR=./screenshots/combined node test/chrome-cdp-test.mjs
-
-# 结束会话并退出 Action
-touch /tmp/continue
-\`\`\`
-EOF
+            echo "## 🔑 Tmate 交互式调试终端 (SSH & Web Shell)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **SSH 快速连接**: \`$TMATE_SSH\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Web 网页终端**: [$TMATE_WEB]($TMATE_WEB)" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### 🛠️ 常用测试命令：" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 检查 DSH: \`curl -I http://127.0.0.1:3080/\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 查看日志: \`tail -f /tmp/dsh-combined.log\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 运行 Chrome 测试: \`TEST_MODE=combined TARGET_URL=http://127.0.0.1:3080/ HEADLESS=true OUTPUT_DIR=./screenshots/combined node test/chrome-cdp-test.mjs\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 结束会话: \`touch /tmp/continue\`" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          # 在 runner 环境中生成 MOTD 欢迎提示
-          cat << 'WELCOME' > /tmp/welcome.txt
-================================================================================
-🎉 欢迎进入 DSH-Plugs-Test 远程测试与调试终端！
-================================================================================
-当前目录: $(pwd)
-Node.js: $(node -v)
-DSH: $(dsh --version 2>/dev/null || echo 'dsh installed')
+          tmate -S /tmp/tmate.sock send-keys "echo '=== 欢迎进入 DSH-Plugs-Test 调试终端 ==='" C-m
+          tmate -S /tmp/tmate.sock send-keys "echo '运行测试: node test/chrome-cdp-test.mjs'" C-m
+          tmate -S /tmp/tmate.sock send-keys "echo '查看日志: tail -f /tmp/dsh-combined.log'" C-m
+          tmate -S /tmp/tmate.sock send-keys "echo '退出结束: touch /tmp/continue'" C-m
 
-常用测试命令：
-1. 运行 Chrome CDP 验证:
-   TEST_MODE=combined TARGET_URL=http://127.0.0.1:3080/ HEADLESS=true OUTPUT_DIR=./screenshots/combined node test/chrome-cdp-test.mjs
-2. 查看 DSH 日志:
-   tail -n 50 -f /tmp/dsh-combined.log
-3. 检查端口与进程:
-   ps aux | grep dsh
-   curl -I http://127.0.0.1:3080/
-4. 退出并结束当前 GitHub Action Job:
-   touch /tmp/continue
-================================================================================
-WELCOME
-          tmate -S /tmp/tmate.sock send-keys "cat /tmp/welcome.txt" C-m
-
-          # 持续等待用户调试，每 10 秒心跳一次，直到用户 touch /tmp/continue 或杀死 tmate
           while [ ! -f /tmp/continue ] && pgrep -x tmate >/dev/null; do
             sleep 10
           done
